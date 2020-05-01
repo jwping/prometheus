@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"github.com/alecthomas/units"
+	"github.com/docker/docker/pkg/filenotify"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	conntrack "github.com/mwitkow/go-conntrack"
@@ -124,6 +125,9 @@ func main() {
 		prometheusURL   string
 		corsRegexString string
 
+		// 在命令行中增加监听配置文件变动的可选配置项指定变量
+		monitorConfig bool
+
 		promlogConfig promlog.Config
 	}{
 		notifier: notifier.Options{
@@ -141,6 +145,10 @@ func main() {
 	a.Version(version.Print("prometheus"))
 
 	a.HelpFlag.Short('h')
+
+	// 在命令行中增加监听配置文件变动的可选配置项
+	a.Flag("monitor", "Monitor profile changes.").
+		Default("false").BoolVar(&cfg.monitorConfig)
 
 	a.Flag("config.file", "Prometheus configuration file path.").
 		Default("prometheus.yml").StringVar(&cfg.configFile)
@@ -753,6 +761,54 @@ func main() {
 			},
 		)
 	}
+
+	// 添加配置文件轮询监听器
+	if cfg.monitorConfig {
+		cancel := make(chan struct{})
+		g.Add(
+			func() error {
+				watch := filenotify.NewPollingWatcher()
+				defer watch.Close()
+				err = watch.Add(cfg.configFile)
+				if err != nil {
+					// level.Error(logger).Log("msg", "Failed to listen to profile", "err", err)
+					return errors.New("Failed to listen to profile err: " + err.Error())
+				}
+
+				level.Info(logger).Log("msg", "Profile listening on...")
+				for {
+					select {
+					case ev := <-watch.Events():
+						{
+							if len(ev.Name) == 0 {
+								level.Error(logger).Log("msg", "Profile change detected, but appears to be empty name.")
+								break
+							}
+							if ev.Op == 2 {
+								if err := reloadConfig(cfg.configFile, logger, reloaders...); err != nil {
+									level.Error(logger).Log("msg", "Error reloading config", "err", err)
+								}
+							}
+						}
+					case err := <-watch.Errors():
+						{
+							// level.Error(logger).Log("msg", "Listener exits abnormally", "err", err)
+							return errors.New("Listener exits abnormally err: " + err.Error())
+						}
+					case <-cancel:
+						{
+							// level.Error(logger).Log("msg", "Monitor - Interrupt function trigger")
+							return errors.New("Listener receives interrupt processing signal")
+						}
+					}
+				}
+			},
+			func(err error) {
+				close(cancel)
+			},
+		)
+	}
+
 	if err := g.Run(); err != nil {
 		level.Error(logger).Log("err", err)
 		os.Exit(1)
