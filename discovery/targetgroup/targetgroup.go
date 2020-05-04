@@ -16,6 +16,7 @@ package targetgroup
 import (
 	"bytes"
 	"encoding/json"
+	"net/url"
 
 	"github.com/prometheus/common/model"
 )
@@ -27,6 +28,9 @@ type Group struct {
 	Targets []model.LabelSet
 	// Labels is a set of labels that is common across all targets in the group.
 	Labels model.LabelSet
+
+	// 添加Params成员
+	Params url.Values
 
 	// Source is an identifier that describes a group of targets.
 	Source string
@@ -41,6 +45,9 @@ func (tg *Group) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	g := struct {
 		Targets []string       `yaml:"targets"`
 		Labels  model.LabelSet `yaml:"labels"`
+
+		// 添加Params
+		Params url.Values `yaml:"params"`
 	}{}
 	if err := unmarshal(&g); err != nil {
 		return err
@@ -52,6 +59,9 @@ func (tg *Group) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		})
 	}
 	tg.Labels = g.Labels
+
+	// 将解析到的Params赋给tg
+	tg.Params = g.Params
 	return nil
 }
 
@@ -60,9 +70,13 @@ func (tg Group) MarshalYAML() (interface{}, error) {
 	g := &struct {
 		Targets []string       `yaml:"targets"`
 		Labels  model.LabelSet `yaml:"labels,omitempty"`
+
+		Params url.Values `yaml:"params"`
 	}{
 		Targets: make([]string, 0, len(tg.Targets)),
 		Labels:  tg.Labels,
+
+		Params: tg.Params,
 	}
 	for _, t := range tg.Targets {
 		g.Targets = append(g.Targets, string(t[model.AddressLabel]))
@@ -75,6 +89,8 @@ func (tg *Group) UnmarshalJSON(b []byte) error {
 	g := struct {
 		Targets []string       `json:"targets"`
 		Labels  model.LabelSet `json:"labels"`
+
+		Params url.Values `json:"params"`
 	}{}
 
 	dec := json.NewDecoder(bytes.NewReader(b))
@@ -89,5 +105,6 @@ func (tg *Group) UnmarshalJSON(b []byte) error {
 		})
 	}
 	tg.Labels = g.Labels
+	tg.Params = g.Params
 	return nil
 }

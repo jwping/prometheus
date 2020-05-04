@@ -454,7 +454,15 @@ func targetsFromGroup(tg *targetgroup.Group, cfg *config.ScrapeConfig) ([]*Targe
 			return nil, errors.Wrapf(err, "instance %d in group %s", i, tg)
 		}
 		if lbls != nil || origLabels != nil {
-			targets = append(targets, NewTarget(lbls, origLabels, cfg.Params))
+
+			// 判断，如果Group中存在Params字段则使用Group中定义的params
+			if tg.Params != nil {
+				targets = append(targets, NewTarget(lbls, origLabels, tg.Params))
+			} else {
+				targets = append(targets, NewTarget(lbls, origLabels, cfg.Params))
+			}
+
+			// targets = append(targets, NewTarget(lbls, origLabels, cfg.Params))
 		}
 	}
 	return targets, nil

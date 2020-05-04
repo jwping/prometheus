@@ -1,0 +1,9 @@
+[
+  {
+    "targets": [ "192.168.14.132:9100" ],
+    "params": {
+      "portlist": [ ":9100", "127.0.0.1:22" ],
+      "httplist": [ "http://www.baidu.com" ]
+    }
+  }
+]
