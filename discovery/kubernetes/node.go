@@ -16,7 +16,9 @@ package kubernetes
 import (
 	"context"
 	"net"
+	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -182,6 +184,8 @@ func (n *Node) buildNode(node *apiv1.Node) *targetgroup.Group {
 	}
 	tg.Labels = nodeLabels(node)
 
+	getParams(tg)
+
 	addr, addrMap, err := nodeAddress(node)
 	if err != nil {
 		level.Warn(n.logger).Log("msg", "No node address found", "err", err)
@@ -201,6 +205,31 @@ func (n *Node) buildNode(node *apiv1.Node) *targetgroup.Group {
 	tg.Targets = append(tg.Targets, t)
 
 	return tg
+}
+
+// 获取params后直接返回
+func getParams(tg *targetgroup.Group) {
+	const (
+		portkey = "portlist"
+		httpkey = "httplist"
+	)
+
+	params := url.Values{}
+
+	// 可以通过资源的annotate获取params
+	if value, ok := tg.Labels[nodeAnnotationPrefix+portkey]; ok {
+		portlist := strings.Split(string(value), ",")
+		params[portkey] = make([]string, len(portlist))
+		copy(params[portkey], portlist)
+	}
+	if value, ok := tg.Labels[nodeAnnotationPrefix+httpkey]; ok {
+		httplist := strings.Split(string(value), ",")
+		params[httpkey] = make([]string, len(httplist))
+		copy(params[httpkey], httplist)
+	}
+
+	tg.Params = params
+	return
 }
 
 // nodeAddresses returns the provided node's address, based on the priority:

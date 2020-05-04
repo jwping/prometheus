@@ -20,7 +20,29 @@ rule_files:
 # Here it's Prometheus itself.
 scrape_configs:
   # The job name is added as a label `job=<job_name>` to any timeseries scraped from this config.
-  - job_name: 'prometheus'
+  - job_name: "kube-node"
+    scheme: http
+    # 资源上的annotate优先级会大于配置文件中定义的params
+    params:
+      portlist: [ ":3306", "127.0.0.1:9100" ]
+      httplist: [ "https://www.baidu.com", "https://www.hao123.com" ]
+    # tls_config:
+    #   ca_file: serviceaccount/ca.crt
+    # bearer_token_file: serviceaccount/token
+    kubernetes_sd_configs:
+    - role: node
+      api_server: https://192.168.14.130:6443
+      tls_config:
+        ca_file: serviceaccount/ca.crt
+      bearer_token_file: serviceaccount/token
+    relabel_configs:
+    - source_labels: [__address__]
+      regex: '(.*):10250'
+      replacement: '${1}:30251'
+      target_label: __address__
+  
+
+  # - job_name: 'prometheus'
     
     # params:
     #   portlist: [ ":9100", "127.0.0.1:22" ]
@@ -28,6 +50,6 @@ scrape_configs:
     # static_configs:
     # - targets: ['192.168.14.132:9100']
 
-    file_sd_configs:
-    - files:
-      - 'tfile.json'
+    # file_sd_configs:
+    # - files:
+    #   - 'tfile.json'

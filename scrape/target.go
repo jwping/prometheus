@@ -203,18 +203,20 @@ func (t *Target) URL() *url.URL {
 		params[k] = make([]string, len(v))
 		copy(params[k], v)
 	}
-	for _, l := range t.labels {
-		if !strings.HasPrefix(l.Name, model.ParamLabelPrefix) {
-			continue
-		}
-		ks := l.Name[len(model.ParamLabelPrefix):]
 
-		if len(params[ks]) > 0 {
-			params[ks][0] = l.Value
-		} else {
-			params[ks] = []string{l.Value}
-		}
-	}
+	// 该段会影响我们的二次开发
+	// for _, l := range t.labels {
+	// 	if !strings.HasPrefix(l.Name, model.ParamLabelPrefix) {
+	// 		continue
+	// 	}
+	// 	ks := l.Name[len(model.ParamLabelPrefix):]
+
+	// 	if len(params[ks]) > 0 {
+	// 		params[ks][0] = l.Value
+	// 	} else {
+	// 		params[ks] = []string{l.Value}
+	// 	}
+	// }
 
 	return &url.URL{
 		Scheme:   t.labels.Get(model.SchemeLabel),
@@ -456,7 +458,7 @@ func targetsFromGroup(tg *targetgroup.Group, cfg *config.ScrapeConfig) ([]*Targe
 		if lbls != nil || origLabels != nil {
 
 			// 判断，如果Group中存在Params字段则使用Group中定义的params
-			if tg.Params != nil {
+			if len(tg.Params) != 0 {
 				targets = append(targets, NewTarget(lbls, origLabels, tg.Params))
 			} else {
 				targets = append(targets, NewTarget(lbls, origLabels, cfg.Params))
