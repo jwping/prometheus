@@ -34,7 +34,6 @@ import (
 	"time"
 
 	"github.com/alecthomas/units"
-	"github.com/docker/docker/pkg/filenotify"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	conntrack "github.com/mwitkow/go-conntrack"
@@ -48,6 +47,7 @@ import (
 	jcfg "github.com/uber/jaeger-client-go/config"
 	jprom "github.com/uber/jaeger-lib/metrics/prometheus"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
+	fsnotify "gopkg.in/fsnotify/fsnotify.v1"
 	"k8s.io/klog"
 
 	promlogflag "github.com/prometheus/common/promlog/flag"
@@ -762,42 +762,52 @@ func main() {
 		)
 	}
 
-	// 添加配置文件轮询监听器
+	// 添加配置文件监听器
 	if cfg.monitorConfig {
 		cancel := make(chan struct{})
 		g.Add(
 			func() error {
-				watch := filenotify.NewPollingWatcher()
-				defer watch.Close()
-				err = watch.Add(cfg.configFile)
+				//创建一个监控对象
+				watch, err := fsnotify.NewWatcher()
 				if err != nil {
-					// level.Error(logger).Log("msg", "Failed to listen to profile", "err", err)
+					return errors.New("Profile listener creation failed: " + err.Error())
+				}
+				defer watch.Close()
+				//添加要监控的对象，文件或文件夹
+				if err = watch.Add(cfg.configFile); err != nil {
 					return errors.New("Failed to listen to profile err: " + err.Error())
 				}
 
 				level.Info(logger).Log("msg", "Profile listening on...")
 				for {
 					select {
-					case ev := <-watch.Events():
+					case ev := <-watch.Events:
 						{
 							if len(ev.Name) == 0 {
-								level.Error(logger).Log("msg", "Profile change detected, but appears to be empty name.")
+								level.Info(logger).Log("Profile change detected, but appears to be empty name.")
 								break
 							}
-							if ev.Op == 2 {
-								if err := reloadConfig(cfg.configFile, logger, reloaders...); err != nil {
-									level.Error(logger).Log("msg", "Error reloading config", "err", err)
-								}
+
+							// Everything but a chmod requires rereading.
+							if ev.Op^fsnotify.Chmod == 0 {
+								break
 							}
+
+							if err := reloadConfig(cfg.configFile, logger, reloaders...); err != nil {
+								level.Error(logger).Log("Error reloading config err: " + err.Error())
+							}
+
+							if err = watch.Add(cfg.configFile); err != nil {
+								return errors.New("Failed to listen to profile err: " + err.Error())
+							}
+
 						}
-					case err := <-watch.Errors():
+					case err := <-watch.Errors:
 						{
-							// level.Error(logger).Log("msg", "Listener exits abnormally", "err", err)
 							return errors.New("Listener exits abnormally err: " + err.Error())
 						}
 					case <-cancel:
 						{
-							// level.Error(logger).Log("msg", "Monitor - Interrupt function trigger")
 							return errors.New("Listener receives interrupt processing signal")
 						}
 					}
