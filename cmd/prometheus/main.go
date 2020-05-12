@@ -434,6 +434,8 @@ func main() {
 		conntrack.DialWithTracing(),
 	)
 
+	cMonitoring := config.NewCMonitoring()
+
 	reloaders := []func(cfg *config.Config) error{
 		remoteStorage.ApplyConfig,
 		webHandler.ApplyConfig,
@@ -479,6 +481,7 @@ func main() {
 				}
 				files = append(files, fs...)
 			}
+			go cMonitoring.JudgeChange(files)
 			return ruleManager.Update(
 				time.Duration(cfg.GlobalConfig.EvaluationInterval),
 				files,
@@ -762,8 +765,9 @@ func main() {
 		)
 	}
 
-	// 添加配置文件监听器
-	if cfg.monitorConfig {
+	{
+		// 添加配置文件监听器
+		// if cfg.monitorConfig {
 		cancel := make(chan struct{})
 		g.Add(
 			func() error {
@@ -773,10 +777,6 @@ func main() {
 					return errors.New("Profile listener creation failed: " + err.Error())
 				}
 				defer watch.Close()
-				//添加要监控的对象，文件或文件夹
-				if err = watch.Add(cfg.configFile); err != nil {
-					return errors.New("Failed to listen to profile err: " + err.Error())
-				}
 
 				level.Info(logger).Log("msg", "Profile listening on...")
 				for {
@@ -797,14 +797,29 @@ func main() {
 								level.Error(logger).Log("Error reloading config err: " + err.Error())
 							}
 
-							if err = watch.Add(cfg.configFile); err != nil {
-								return errors.New("Failed to listen to profile err: " + err.Error())
-							}
-
 						}
 					case err := <-watch.Errors:
 						{
 							return errors.New("Listener exits abnormally err: " + err.Error())
+						}
+					case <-cMonitoring.Channel:
+						{
+							for _, file := range cMonitoring.Removefiles {
+								if err := watch.Remove(file); err != nil {
+									return errors.New("File listening removal failed: " + err.Error())
+								}
+							}
+
+							//添加要监控的对象，文件或文件夹
+							if err = watch.Add(cfg.configFile); err != nil {
+								return errors.New("Failed to listen to profile err: " + err.Error())
+							}
+
+							for _, file := range cMonitoring.Rules {
+								if err := watch.Add(file); err != nil {
+									return errors.New("Failed to listen to profile err: " + err.Error())
+								}
+							}
 						}
 					case <-cancel:
 						{
@@ -817,6 +832,7 @@ func main() {
 				close(cancel)
 			},
 		)
+		// }
 	}
 
 	if err := g.Run(); err != nil {
