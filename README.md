@@ -64,6 +64,21 @@ Makefile提供了几个目标：
 - *vet*：检查源代码是否存在常见错误
 - *docker*：为当前容器构建一个docker容器（全架构构建）
 
+### 3.3 Docker镜像构建
+
+```shell
+# 这里官方的Dockerfile有个小bug
+# 请修改L8、L9
+COPY .build/${OS}-${ARCH}/prometheus        /bin/prometheus
+COPY .build/${OS}-${ARCH}/promtool          /bin/promtool
+# 修改为如下↓
+# 因为make构建出来的二进制可执行程序是放在当前路径下的，而不是.build下
+COPY prometheus        /bin/prometheus
+COPY promtool          /bin/promtool
+```
+
+
+
 ## 4. 新增功能
 
 ### 4.1 配置文件监听重载
@@ -219,3 +234,103 @@ CreationTimestamp:  Tue, 12 May 2020 13:38:52 +0800
 ```
 
 当前版本下，我们对于`kubernetes_sd_configs`方式配置Params参数仅支持了`portlist`、`httplist`两类可选的URL附加参数，源码可见[discovery/kubernetes/node.go#187](https://github.com/jwping/prometheus/blob/master/discovery/kubernetes/node.go#L187)行，分别用于采集指定端口连通性和指定URL连通性，[详情可参考我们二次定制的node_export](https://github.com/jwping/node_exporter)
+
+
+
+## 5. 修改说明
+
+### 5.1 新增monitoring.go
+
+```go
+config/monitoring.go
+
+// 该结构体主要定义了用户指定的规则文件列表和每次重载后移除的规则文件列表
+type CMonitoring struct {
+    Rules       []string
+	Removefiles []string
+    
+	Channel chan struct{}
+}
+
+// 结构体实例化函数
+func NewCMonitoring() *CMonitoring {...}
+
+// 每次重载后将调用该函数来对用户配置文件指定的规则文件进行整理，已移除的文件加入到Removefiles中
+func (c *CMonitoring) JudgeChange(files []string) {...}
+```
+
+
+
+### 5.2 修改main.go
+
+```go
+cmd/prometheus/main.go
+
+// L50引用fsnotify包
+fsnotify "gopkg.in/fsnotify/fsnotify.v1"
+
+// L436增加CMonitoring实例化
+cMonitoring := config.NewCMonitoring()
+
+// L483增加Judge调用
+go cMonitoring.JudgeChange(files)
+
+// L768增加配置文件监听（包括程序主配置文件以及告警规则文件）
+// 详见源码
+```
+
+
+
+### 5.3 修改node.go
+
+```go
+discovery/kubernetes/node.go
+
+// L187增加getParams函数调用
+getParams(tg)
+
+// L211新增getParams函数
+// 获取params后直接返回，指定了只在annotate中寻找portlist、httplist标签
+func getParams(tg *targetgroup.Group) {}
+```
+
+
+
+### 5.4 修改targetgroup.go
+
+```go
+discovery/targetgroup/targetgroup.go
+
+// L33
+// 添加Params成员
+Params url.Values
+
+// L50
+// 添加Params
+Params url.Values `yaml:"params"`
+// 下同
+```
+
+
+
+### 5.5 修改taget.go
+
+```go
+scrape/taget.go
+
+// L208移除部分
+// 详见源码
+
+// L460增加对targetGroup的params判断，如果存在则使用target中定义的params
+// 详见源码
+```
+
+
+
+### 5.6 增加主程序模板配置
+
+```go
+cmd/prometheus/prometheus.yml
+cmd/prometheus/tfile.json
+```
+

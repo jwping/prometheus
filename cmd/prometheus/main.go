@@ -125,9 +125,6 @@ func main() {
 		prometheusURL   string
 		corsRegexString string
 
-		// 在命令行中增加监听配置文件变动的可选配置项指定变量
-		monitorConfig bool
-
 		promlogConfig promlog.Config
 	}{
 		notifier: notifier.Options{
@@ -145,10 +142,6 @@ func main() {
 	a.Version(version.Print("prometheus"))
 
 	a.HelpFlag.Short('h')
-
-	// 在命令行中增加监听配置文件变动的可选配置项
-	a.Flag("monitor", "Monitor profile changes.").
-		Default("false").BoolVar(&cfg.monitorConfig)
 
 	a.Flag("config.file", "Prometheus configuration file path.").
 		Default("prometheus.yml").StringVar(&cfg.configFile)
@@ -212,7 +205,7 @@ func main() {
 	a.Flag("storage.tsdb.retention.time", "How long to retain samples in storage. When this flag is set it overrides \"storage.tsdb.retention\". If neither this flag nor \"storage.tsdb.retention\" nor \"storage.tsdb.retention.size\" is set, the retention time defaults to "+defaultRetentionString+". Units Supported: y, w, d, h, m, s, ms.").
 		SetValue(&newFlagRetentionDuration)
 
-	a.Flag("storage.tsdb.retention.size", "[EXPERIMENTAL] Maximum number of bytes that can be stored for blocks. Units supported: KB, MB, GB, TB, PB. This flag is experimental and can be changed in future releases.").
+	a.Flag("storage.tsdb.retention.size", "[EXPERIMENTAL] Maximum number of bytes that can be stored for blocks. A unit is required, supported units: B, KB, MB, GB, TB, PB, EB. Ex: \"512MB\". This flag is experimental and can be changed in future releases.").
 		BytesVar(&cfg.tsdb.MaxBytes)
 
 	a.Flag("storage.tsdb.no-lockfile", "Do not create lockfile in data directory.").
@@ -222,7 +215,7 @@ func main() {
 		Default("false").BoolVar(&cfg.tsdb.AllowOverlappingBlocks)
 
 	a.Flag("storage.tsdb.wal-compression", "Compress the tsdb WAL.").
-		Default("false").BoolVar(&cfg.tsdb.WALCompression)
+		Default("true").BoolVar(&cfg.tsdb.WALCompression)
 
 	a.Flag("storage.remote.flush-deadline", "How long to wait flushing sample on shutdown or config reload.").
 		Default("1m").PlaceHolder("<duration>").SetValue(&cfg.RemoteFlushDeadline)
@@ -283,6 +276,12 @@ func main() {
 	cfg.web.CORSOrigin, err = compileCORSRegexString(cfg.corsRegexString)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, errors.Wrapf(err, "could not compile CORS regex string %q", cfg.corsRegexString))
+		os.Exit(2)
+	}
+
+	// Throw error for invalid config before starting other components.
+	if _, err := config.LoadFile(cfg.configFile); err != nil {
+		level.Error(logger).Log("msg", fmt.Sprintf("Error loading config (--config.file=%s)", cfg.configFile), "err", err)
 		os.Exit(2)
 	}
 
@@ -381,7 +380,7 @@ func main() {
 
 		ruleManager = rules.NewManager(&rules.ManagerOptions{
 			Appendable:      fanoutStorage,
-			TSDB:            localStorage,
+			Queryable:       localStorage,
 			QueryFunc:       rules.EngineQueryFunc(queryEngine, fanoutStorage),
 			NotifyFunc:      sendAlerts(notifierManager, cfg.web.ExternalURL.String()),
 			Context:         ctxRule,
@@ -395,9 +394,10 @@ func main() {
 	)
 
 	cfg.web.Context = ctxWeb
-	cfg.web.TSDB = localStorage.Get
 	cfg.web.TSDBRetentionDuration = cfg.tsdb.RetentionDuration
 	cfg.web.TSDBMaxBytes = cfg.tsdb.MaxBytes
+	cfg.web.TSDBDir = cfg.localStoragePath
+	cfg.web.LocalStorage = localStorage
 	cfg.web.Storage = fanoutStorage
 	cfg.web.QueryEngine = queryEngine
 	cfg.web.ScrapeManager = scrapeManager
@@ -832,7 +832,7 @@ func main() {
 				close(cancel)
 			},
 		)
-		// }
+		// )
 	}
 
 	if err := g.Run(); err != nil {
@@ -1003,14 +1003,7 @@ func (s *readyStorage) Set(db *tsdb.DB, startTimeMargin int64) {
 	s.startTimeMargin = startTimeMargin
 }
 
-// Get the storage.
-func (s *readyStorage) Get() *tsdb.DB {
-	if x := s.get(); x != nil {
-		return x
-	}
-	return nil
-}
-
+// get is internal, you should use readyStorage as the front implementation layer.
 func (s *readyStorage) get() *tsdb.DB {
 	s.mtx.RLock()
 	x := s.db
@@ -1043,6 +1036,14 @@ func (s *readyStorage) Querier(ctx context.Context, mint, maxt int64) (storage.Q
 	return nil, tsdb.ErrNotReady
 }
 
+// ChunkQuerier implements the Storage interface.
+func (s *readyStorage) ChunkQuerier(ctx context.Context, mint, maxt int64) (storage.ChunkQuerier, error) {
+	if x := s.get(); x != nil {
+		return x.ChunkQuerier(ctx, mint, maxt)
+	}
+	return nil, tsdb.ErrNotReady
+}
+
 // Appender implements the Storage interface.
 func (s *readyStorage) Appender() storage.Appender {
 	if x := s.get(); x != nil {
@@ -1065,10 +1066,42 @@ func (n notReadyAppender) Rollback() error { return tsdb.ErrNotReady }
 
 // Close implements the Storage interface.
 func (s *readyStorage) Close() error {
-	if x := s.Get(); x != nil {
+	if x := s.get(); x != nil {
 		return x.Close()
 	}
 	return nil
+}
+
+// CleanTombstones implements the api_v1.TSDBAdminStats and api_v2.TSDBAdmin interfaces.
+func (s *readyStorage) CleanTombstones() error {
+	if x := s.get(); x != nil {
+		return x.CleanTombstones()
+	}
+	return tsdb.ErrNotReady
+}
+
+// Delete implements the api_v1.TSDBAdminStats and api_v2.TSDBAdmin interfaces.
+func (s *readyStorage) Delete(mint, maxt int64, ms ...*labels.Matcher) error {
+	if x := s.get(); x != nil {
+		return x.Delete(mint, maxt, ms...)
+	}
+	return tsdb.ErrNotReady
+}
+
+// Snapshot implements the api_v1.TSDBAdminStats and api_v2.TSDBAdmin interfaces.
+func (s *readyStorage) Snapshot(dir string, withHead bool) error {
+	if x := s.get(); x != nil {
+		return x.Snapshot(dir, withHead)
+	}
+	return tsdb.ErrNotReady
+}
+
+// Stats implements the api_v1.TSDBAdminStats interface.
+func (s *readyStorage) Stats(statsByLabelName string) (*tsdb.Stats, error) {
+	if x := s.get(); x != nil {
+		return x.Head().Stats(statsByLabelName), nil
+	}
+	return nil, tsdb.ErrNotReady
 }
 
 // tsdbOptions is tsdb.Option version with defined units.

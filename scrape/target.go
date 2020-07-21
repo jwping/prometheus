@@ -204,7 +204,7 @@ func (t *Target) URL() *url.URL {
 		copy(params[k], v)
 	}
 
-	// 该段会影响我们的二次开发
+	// 该段暂时去除，会影响到我们添加自己的params
 	// for _, l := range t.labels {
 	// 	if !strings.HasPrefix(l.Name, model.ParamLabelPrefix) {
 	// 		continue

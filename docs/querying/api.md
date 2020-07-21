@@ -268,6 +268,12 @@ GET /api/v1/labels
 POST /api/v1/labels
 ```
 
+URL query parameters:
+
+- `start=<rfc3339 | unix_timestamp>`: Start timestamp. Optional.
+- `end=<rfc3339 | unix_timestamp>`: End timestamp. Optional.
+
+
 The `data` section of the JSON response is a list of string label names.
 
 Here is an example.
@@ -309,6 +315,12 @@ The following endpoint returns a list of label values for a provided label name:
 ```
 GET /api/v1/label/<label_name>/values
 ```
+
+URL query parameters:
+
+- `start=<rfc3339 | unix_timestamp>`: Start timestamp. Optional.
+- `end=<rfc3339 | unix_timestamp>`: End timestamp. Optional.
+
 
 The `data` section of the JSON response is a list of string label values.
 
@@ -523,7 +535,7 @@ $ curl http://localhost:9090/api/v1/rules
                     {
                         "health": "ok",
                         "name": "job:http_inprogress_requests:sum",
-                        "query": "sum(http_inprogress_requests) by (job)",
+                        "query": "sum by (job) (http_inprogress_requests)",
                         "type": "recording"
                     }
                 ],

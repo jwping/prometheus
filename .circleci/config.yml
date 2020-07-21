@@ -60,10 +60,15 @@ jobs:
     steps:
     - checkout
     - run:
+        # Temporary workaround until circleci updates go.
+        shell: bash
+        command: |
+          choco upgrade -y golang
+    - run:
         shell: bash
         command: |
           (cd web/ui && GOOS= GOARCH= go generate -mod=vendor)
-          go test -mod=vendor -test.v `go list ./...|grep -Exv "(github.com/prometheus/prometheus/discovery.*|github.com/prometheus/prometheus/config|github.com/prometheus/prometheus/web)"`
+          go test -mod=vendor -vet=off -test.v `go list ./...|grep -Exv "(github.com/prometheus/prometheus/discovery.*|github.com/prometheus/prometheus/config|github.com/prometheus/prometheus/web)"`
         environment:
           GOGC: "20"
           GOOPTS: "-p 2 -mod=vendor"
@@ -82,11 +87,11 @@ jobs:
       - setup_remote_docker
       - run: ./fuzzit.sh fuzzing
 
-  makefile_sync:
+  repo_sync:
     executor: golang
     steps:
     - checkout
-    - run: ./scripts/sync_makefiles.sh
+    - run: ./scripts/sync_repo_files.sh
 
 workflows:
   version: 2
@@ -138,7 +143,7 @@ workflows:
               only:
                 - master
     jobs:
-    - makefile_sync:
+    - repo_sync:
         context: org-context
     - fuzzit_fuzzing:
         context: org-context
