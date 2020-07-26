@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -36,7 +37,8 @@ import (
 )
 
 const (
-	watchTimeout  = 10 * time.Minute
+	// 增加监视器超时时间，避免不必要的垃圾日志输出
+	watchTimeout  = 30 * time.Minute
 	retryInterval = 15 * time.Second
 
 	// addressLabel is the name for the label containing a target's address.
@@ -501,10 +503,28 @@ func (srv *consulService) watch(ctx context.Context, ch chan<- []*targetgroup.Gr
 		Targets: make([]model.LabelSet, 0, len(serviceNodes)),
 	}
 
+	const (
+		portkey = "portlist"
+		httpkey = "httplist"
+	)
+
 	for _, serviceNode := range serviceNodes {
 		// We surround the separated list with the separator as well. This way regular expressions
 		// in relabeling rules don't have to consider tag positions.
 		var tags = srv.tagSeparator + strings.Join(serviceNode.Service.Tags, srv.tagSeparator) + srv.tagSeparator
+
+		params := url.Values{}
+		if _, ok := serviceNode.Service.Meta[portkey]; ok {
+			portlist := strings.Split(serviceNode.Service.Meta[portkey], ",")
+			params[portkey] = make([]string, len(portlist))
+			copy(params[portkey], portlist)
+		}
+		if _, ok := serviceNode.Service.Meta[httpkey]; ok {
+			httplist := strings.Split(serviceNode.Service.Meta[httpkey], ",")
+			params[httpkey] = make([]string, len(httplist))
+			copy(params[httpkey], httplist)
+		}
+		tgroup.Params = params
 
 		// If the service address is not empty it should be used instead of the node address
 		// since the service may be registered remotely through a different node.

@@ -19,26 +19,45 @@ rule_files:
 # Here it's Prometheus itself.
 scrape_configs:
   # The job name is added as a label `job=<job_name>` to any timeseries scraped from this config.
-  - job_name: "kube-node"
-    scheme: http
-    # 资源上的annotate优先级会大于配置文件中定义的params
-    params:
-      portlist: [ ":3306", "127.0.0.1:9100" ]
-      httplist: [ "https://www.baidu.com", "https://www.hao123.com" ]
-    # tls_config:
-    #   ca_file: serviceaccount/ca.crt
-    # bearer_token_file: serviceaccount/token
-    kubernetes_sd_configs:
-    - role: node
-      api_server: https://192.168.14.130:6443
-      tls_config:
-        ca_file: serviceaccount/ca.crt
-      bearer_token_file: serviceaccount/token
+  - job_name: "consul-node"
+    consul_sd_configs:
+    - server: '192.168.14.132:8500'
+      # 表示需要采集哪些service，为空表示采集所有
+      services: []
+      # 需要采集指定tags的服务，这里我们在加consul-service的时候指定了tags（"tags": ["DEV"]）
+      tags: ["DEV"]
     relabel_configs:
-    - source_labels: [__address__]
-      regex: '(.*):10250'
-      replacement: '${1}:30251'
-      target_label: __address__
+    # 这里假定加入的每个service都为node_exporter且id为对应的主机名
+    - source_labels: ["__meta_consul_service_id"]
+      target_label: "hostname"
+    # 假定加入的Service Name为对应的主机组名
+    - source_labels: ["__meta_consul_service"]
+      target_label: "servicename"
+
+
+  # The job name is added as a label `job=<job_name>` to any timeseries scraped from this config.
+  # - job_name: "kube-node"
+  #   scheme: http
+  #   # 资源上的annotate优先级会大于配置文件中定义的params
+  #   params:
+  #     portlist: [ ":3306", "127.0.0.1:9100" ]
+  #     httplist: [ "https://www.baidu.com", "https://www.hao123.com" ]
+  #   # tls_config:
+  #   #   ca_file: serviceaccount/ca.crt
+  #   # bearer_token_file: serviceaccount/token
+  #   kubernetes_sd_configs:
+  #   - role: node
+  #     api_server: https://192.168.14.130:6443
+  #     tls_config:
+  #       ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+  #       # 如果未指定ca证书请跳过https验证
+  #       # insecure_skip_verify: true
+  #     bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+  #   relabel_configs:
+  #   - source_labels: [__address__]
+  #     regex: '(.*):10250'
+  #     replacement: '${1}:30251'
+  #     target_label: __address__
   
 
   # - job_name: 'prometheus'

@@ -2,7 +2,7 @@
 
 ## 1. 简述
 
-该项目是在官方主分支`1c48005`基础上进行二次定制开发的，主要为适应我们使用K8S部署时的一些问题解决，并添加了一些定制化功能。
+该项目是在官方主分支`9b8cc66`基础上进行二次定制开发的，主要为适应我们使用K8S部署时的一些问题解决，并添加了一些定制化功能。
 
 ## 2. 安装
 
@@ -75,6 +75,12 @@ COPY .build/${OS}-${ARCH}/promtool          /bin/promtool
 # 因为make构建出来的二进制可执行程序是放在当前路径下的，而不是.build下
 COPY prometheus        /bin/prometheus
 COPY promtool          /bin/promtool
+
+docker build -t "prometheus-linux-amd64:v2.0" \
+	-f ./Dockerfile \
+	--build-arg ARCH="amd64" \
+	--build-arg OS="linux" \
+	./
 ```
 
 
@@ -185,7 +191,7 @@ curl -XPOST http://ip:port/-/reload
 
 
 
-### 4.2 对每个采集目标单独配置Params
+### 4.2 对每个node单独配置Params
 
 在官方主分支中提供的版本仅支持在一个`jobname`中配置一个可选的URL参数列表，使得Prometheus进行数据采集时附带相应的URL参数，但并不支持对每个Target单独配置`Params`，我们扩展了这一点，目前仅提供对`static_configs`、`file_sd_configs`、`kubernetes_sd_configs`三种``Scrape``方式的支持。
 
@@ -231,9 +237,27 @@ Annotations:        flannel.alpha.coreos.com/backend-data: {"VtepMAC":"56:04:c4:
                     volumes.kubernetes.io/controller-managed-attach-detach: true
 CreationTimestamp:  Tue, 12 May 2020 13:38:52 +0800
 ...
+
+$ kubectl annotate node qemu-node2 --overwrite httplist="https://www.baidu.com,https://aliyun.com,https://www.hao123.com"
+node/qemu-node2 annotated
+# --overwrite表示覆盖写入annotate，我这里已经有了httplist标签的值了，所以加入覆写参数
+# 这里请特别注意url监控列表每一项请加入完整的http://或https://
 ```
 
 当前版本下，我们对于`kubernetes_sd_configs`方式配置Params参数仅支持了`portlist`、`httplist`两类可选的URL附加参数，源码可见[discovery/kubernetes/node.go#187](https://github.com/jwping/prometheus/blob/master/discovery/kubernetes/node.go#L187)行，分别用于采集指定端口连通性和指定URL连通性，[详情可参考我们二次定制的node_export](https://github.com/jwping/node_exporter)
+
+### 4.3 consul配置Params
+
+```shell
+$ cat join.sh 
+curl -X PUT -d \
+	'{"id": "node2","name": "node-exporter","address": "192.168.14.132","port": 9100,"tags": ["DEV"],"meta": {"portlist": ":22,127.0.0.1:9090", "httplist": "https://www.baidu.com,https://taobao.com"},"checks": [{"http": "http://192.168.14.132:9100/","interval": "5s"}]}' \
+	http://192.168.14.132:8500/v1/agent/service/register
+```
+
+> 其中meta为需要添加入params中的自定义内容。
+>
+> 目前仅支持portlist、httplist两种
 
 
 
@@ -296,7 +320,18 @@ func getParams(tg *targetgroup.Group) {}
 
 
 
-### 5.4 修改targetgroup.go
+### 5.4 修改consul.go
+
+```go
+discovery/consul/consul.go
+
+// L506增加portlist、httplist meta过滤
+// 参考源码，基本同node.go
+```
+
+
+
+### 5.5 修改targetgroup.go
 
 ```go
 discovery/targetgroup/targetgroup.go
@@ -313,7 +348,7 @@ Params url.Values `yaml:"params"`
 
 
 
-### 5.5 修改taget.go
+### 5.6 修改taget.go
 
 ```go
 scrape/taget.go
@@ -327,7 +362,7 @@ scrape/taget.go
 
 
 
-### 5.6 增加主程序模板配置
+### 5.7 增加主程序模板配置
 
 ```go
 cmd/prometheus/prometheus.yml
