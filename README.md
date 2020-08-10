@@ -76,6 +76,9 @@ COPY .build/${OS}-${ARCH}/promtool          /bin/promtool
 COPY prometheus        /bin/prometheus
 COPY promtool          /bin/promtool
 
+# 首先生成npm_licenses.tar.bz2文件
+make npm_licenses
+
 docker build -t "prometheus-linux-amd64:v2.0" \
 	-f ./Dockerfile \
 	--build-arg ARCH="amd64" \
