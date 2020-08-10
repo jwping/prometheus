@@ -2,11 +2,11 @@
 
 ## 1. 简述
 
-该项目是在官方主分支`9b8cc66`基础上进行二次定制开发的，主要为适应我们使用K8S部署时的一些问题解决，并添加了一些定制化功能。
+该项目是在官方主分支`fd06416`基础上进行二次定制开发的，主要为适应我们使用K8S部署时的一些问题解决，并添加了一些定制化功能。
 
 ## 2. 安装
 
-### 2.1 预编译版本
+### 2.1 ~~预编译版本~~（该预编译版本过旧）
 
 对于发布版本预编译的二进制是可用的，下载方式如下，可参考[releases](https://github.com/jwping/prometheus/releases)
 
@@ -87,7 +87,7 @@ docker build -t "prometheus-linux-amd64:v2.0" \
 
 ## 4. 新增功能
 
-### 4.1 配置文件监听重载
+### 4.1 ~~配置文件监听重载~~（已删除，Prometheus-operator提供类似的功能）
 
 目前官方对于配置文件（对配置文件中指定的rule目录会进行监听，但rule规则文件不会监听）是不支持变动监听的，再每次文件变动后需要手动重载，官方支持两种方式：
 
@@ -263,7 +263,7 @@ curl -X PUT -d \
 
 ## 5. 修改说明
 
-### 5.1 新增monitoring.go
+### 5.1 ~~新增monitoring.go~~（移除）
 
 ```go
 config/monitoring.go
@@ -285,7 +285,7 @@ func (c *CMonitoring) JudgeChange(files []string) {...}
 
 
 
-### 5.2 修改main.go
+### 5.2 ~~修改main.go~~（移除）
 
 ```go
 cmd/prometheus/main.go
@@ -324,6 +324,9 @@ func getParams(tg *targetgroup.Group) {}
 
 ```go
 discovery/consul/consul.go
+
+// L40延长监视器超时时间，避免不必要的垃圾日志输出
+watchTimeout  = 30 * time.Minute
 
 // L506增加portlist、httplist meta过滤
 // 参考源码，基本同node.go

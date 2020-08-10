@@ -37,7 +37,7 @@ import (
 )
 
 const (
-	// 增加监视器超时时间，避免不必要的垃圾日志输出
+	// 延长监视器超时时间，避免不必要的垃圾日志输出
 	watchTimeout  = 30 * time.Minute
 	retryInterval = 15 * time.Second
 
@@ -186,7 +186,7 @@ func NewDiscovery(conf *SDConfig, logger log.Logger) (*Discovery, error) {
 	}
 	wrapper := &http.Client{
 		Transport: transport,
-		Timeout:   35 * time.Second,
+		Timeout:   time.Duration(watchTimeout) + 15*time.Second,
 	}
 
 	clientConf := &consul.Config{

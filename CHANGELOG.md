@@ -1,4 +1,10 @@
-## 2.20.0-rc.0 / 2020-07-16
+## 2.20.1 / 2020-08-05
+
+* [BUGFIX] SD: Reduce the Consul watch timeout to 2m and adjust the request timeout accordingly. #7724
+
+## 2.20.0 / 2020-07-22
+
+This release changes WAL compression from opt-in to default. WAL compression will prevent a downgrade to v2.10 or earlier without deleting the WAL. Disable WAL compression explicitly by setting the command line flag `--no-storage.tsdb.wal-compression` if you require downgrading to v2.10 or earlier.
 
 * [CHANGE] promtool: Changed rule numbering from 0-based to 1-based when reporting rule errors. #7495
 * [CHANGE] Remote read: Added `prometheus_remote_storage_read_queries_total` counter and `prometheus_remote_storage_read_request_duration_seconds` histogram, removed `prometheus_remote_storage_remote_read_queries_total` counter.
@@ -27,6 +33,7 @@
 * [BUGFIX] PromQL: Fixed off-by-one error in `histogram_quantile`. #7393
 * [BUGFIX] promtool: Support extended durations in rules unit tests. #6297
 * [BUGFIX] Scrape: Fix undercounting for `scrape_samples_post_metric_relabeling` in case of errors. #7342
+* [BUGFIX] TSDB: Don't panic on WAL corruptions. #7550
 * [BUGFIX] TSDB: Avoid leaving behind empty files in `chunks_head`, causing startup failures. #7573
 * [BUGFIX] TSDB: Fixed race between compact (gc, populate) and head append causing unknown symbol error. #7560
 * [BUGFIX] TSDB: Fixed unknown symbol error during head compaction. #7526

@@ -19,20 +19,20 @@ rule_files:
 # Here it's Prometheus itself.
 scrape_configs:
   # The job name is added as a label `job=<job_name>` to any timeseries scraped from this config.
-  - job_name: "consul-node"
-    consul_sd_configs:
-    - server: '192.168.14.132:8500'
-      # 表示需要采集哪些service，为空表示采集所有
-      services: []
-      # 需要采集指定tags的服务，这里我们在加consul-service的时候指定了tags（"tags": ["DEV"]）
-      tags: ["DEV"]
-    relabel_configs:
-    # 这里假定加入的每个service都为node_exporter且id为对应的主机名
-    - source_labels: ["__meta_consul_service_id"]
-      target_label: "hostname"
-    # 假定加入的Service Name为对应的主机组名
-    - source_labels: ["__meta_consul_service"]
-      target_label: "servicename"
+  # - job_name: "consul-node"
+  #   consul_sd_configs:
+  #   - server: '192.168.14.132:8500'
+  #     # 表示需要采集哪些service，为空表示采集所有
+  #     services: []
+  #     # 需要采集指定tags的服务，这里我们在加consul-service的时候指定了tags（"tags": ["DEV"]）
+  #     tags: ["DEV"]
+  #   relabel_configs:
+  #   # 这里假定加入的每个service都为node_exporter且id为对应的主机名
+  #   - source_labels: ["__meta_consul_service_id"]
+  #     target_label: "hostname"
+  #   # 假定加入的Service Name为对应的主机组名
+  #   - source_labels: ["__meta_consul_service"]
+  #     target_label: "servicename"
 
 
   # The job name is added as a label `job=<job_name>` to any timeseries scraped from this config.
@@ -60,13 +60,13 @@ scrape_configs:
   #     target_label: __address__
   
 
-  # - job_name: 'prometheus'
+  - job_name: 'prometheus'
     
-    # params:
-    #   portlist: [ ":9100", "127.0.0.1:22" ]
-    #   httplist: [ "http://www.baidu.com" ]
-    # static_configs:
-    # - targets: ['192.168.14.132:9100']
+    params:
+      portlist: [ ":9100", "127.0.0.1:22" ]
+      httplist: [ "http://www.baidu.com" ]
+    static_configs:
+    - targets: ['192.168.14.132:9100']
 
     # file_sd_configs:
     # - files:
